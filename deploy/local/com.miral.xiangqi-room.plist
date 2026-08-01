@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.miral.xiangqi-room</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE_BIN__</string>
+    <string>__PROJECT_ROOT__/server.js</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__PROJECT_ROOT__</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PORT</key>
+    <string>3000</string>
+    <key>XIANGQI_DATA_DIR</key>
+    <string>__PROJECT_ROOT__/data</string>
+    <key>NODE_NO_WARNINGS</key>
+    <string>1</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>__PROJECT_ROOT__/logs/server.log</string>
+  <key>StandardErrorPath</key>
+  <string>__PROJECT_ROOT__/logs/server-error.log</string>
+</dict>
+</plist>

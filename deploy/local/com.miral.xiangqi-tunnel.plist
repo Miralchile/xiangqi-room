@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.miral.xiangqi-tunnel</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__CPOLAR_BIN__</string>
+    <string>http</string>
+    <string>-region=cn</string>
+    <string>-log=stdout</string>
+    <string>-log-level=INFO</string>
+    <string>-inspect-addr=127.0.0.1:4040</string>
+    <string>3000</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__PROJECT_ROOT__</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>__PROJECT_ROOT__/logs/cpolar.log</string>
+  <key>StandardErrorPath</key>
+  <string>__PROJECT_ROOT__/logs/cpolar-error.log</string>
+</dict>
+</plist>

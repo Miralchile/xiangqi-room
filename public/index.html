@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>中国象棋</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div>
+          <h1>中国象棋</h1>
+          <p id="roomStatus">正在连接棋局...</p>
+        </div>
+        <div class="topActions">
+          <button id="newRoomBtn" type="button">新开一局</button>
+          <button id="copyLinkBtn" type="button">复制邀请链接</button>
+        </div>
+      </header>
+
+      <section class="layout">
+        <aside class="panel">
+          <div class="sectionTitle">棋局</div>
+          <label class="field">
+            <span>邀请链接</span>
+            <input id="inviteLink" readonly />
+          </label>
+
+          <div class="seatGrid">
+            <article class="seat redSeat">
+              <strong>红方</strong>
+              <span id="redSeatText">空位</span>
+              <div class="seatActions">
+                <button id="takeRedBtn" type="button">选择红方</button>
+                <button id="lockRedBtn" type="button">锁定</button>
+              </div>
+            </article>
+            <article class="seat blackSeat">
+              <strong>黑方</strong>
+              <span id="blackSeatText">空位</span>
+              <div class="seatActions">
+                <button id="takeBlackBtn" type="button">选择黑方</button>
+                <button id="lockBlackBtn" type="button">锁定</button>
+              </div>
+            </article>
+          </div>
+
+          <div id="requestBox" class="requestBox hidden"></div>
+
+          <div class="controls">
+            <button id="undoBtn" type="button">申请悔棋</button>
+            <button id="drawBtn" type="button">求和</button>
+            <button id="resignBtn" type="button" class="danger">认输</button>
+          </div>
+        </aside>
+
+        <section class="boardArea">
+          <div class="turnStrip">
+            <div class="turnInfo">
+              <div class="statusLine">
+                <span class="statusLabel">当前</span>
+                <strong id="turnText">等待开局</strong>
+              </div>
+              <div class="statusLine lastMoveLine">
+                <span class="statusLabel">上一步</span>
+                <span id="lastMoveText">尚未走子</span>
+              </div>
+            </div>
+            <span id="viewerText">0 人在线</span>
+          </div>
+          <div id="board" class="board" aria-label="中国象棋棋盘"></div>
+        </section>
+
+        <aside class="panel movesPanel">
+          <div class="sectionTitle">棋谱</div>
+          <ol id="moveList" class="moveList" aria-live="polite"></ol>
+        </aside>
+      </section>
+    </main>
+
+    <div id="toast" class="toast hidden"></div>
+    <div id="confirmModal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="dialog">
+        <h2 id="confirmTitle">确认</h2>
+        <p id="confirmText"></p>
+        <div class="dialogActions">
+          <button id="confirmCancel" type="button">取消</button>
+          <button id="confirmOk" type="button" class="danger">继续</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="resultModal" class="modal hidden" role="alertdialog" aria-modal="true" aria-labelledby="resultTitle">
+      <div class="dialog resultDialog">
+        <h2 id="resultTitle">本局结束</h2>
+        <p id="resultText"></p>
+        <div class="dialogActions">
+          <button id="resultOk" type="button">知道了</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/engine.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

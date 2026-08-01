@@ -1,0 +1,13 @@
+data/
+logs/
+*.sqlite-shm
+*.sqlite-wal
+.DS_Store
+
+# Legacy Sites build files are intentionally excluded from the local deployment.
+.openai/
+dist/
+db/
+drizzle/
+worker/
+build.mjs

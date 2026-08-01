@@ -23,12 +23,15 @@ let pendingConfirm = null;
 let shownResultKey = null;
 let activeSideTab = "moves";
 let lastChatSignature = null;
+let currentChat = null;
+let previousChatRoomId = null;
+let lobbyPollTimer = null;
 const BOARD_PAD = 11;
 const BOARD_X_STEP = (100 - BOARD_PAD * 2) / 8;
 const BOARD_Y_STEP = (100 - BOARD_PAD * 2) / 9;
 const RED_FILE_LABELS = ["九", "八", "七", "六", "五", "四", "三", "二", "一"];
 const BLACK_FILE_LABELS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
-const CHAT_NAME_KEY = "xiangqi-chat-name";
+const CHAT_NAME_KEY_PREFIX = "board-room-person-id:";
 const CHAT_ADJECTIVES = ["沉着", "敏捷", "从容", "机敏", "果断", "安静", "清醒", "专注"];
 const CHAT_NOUNS = ["棋友", "车手", "炮手", "马客", "观棋者", "过河兵", "守宫人", "对弈者"];
 
@@ -48,22 +51,20 @@ function randomChatName() {
   return `${adjective}${noun}${number}`;
 }
 
+function chatNameKey() {
+  return `${CHAT_NAME_KEY_PREFIX}${roomId}`;
+}
+
 function storedChatName() {
-  const stored = localStorage.getItem(CHAT_NAME_KEY)?.trim();
+  const stored = localStorage.getItem(chatNameKey())?.trim();
   if (stored) return stored.slice(0, 16);
   const generated = randomChatName();
-  localStorage.setItem(CHAT_NAME_KEY, generated);
+  localStorage.setItem(chatNameKey(), generated);
   return generated;
 }
 
-chatNameInput.value = storedChatName();
-
 const params = new URLSearchParams(location.search);
 let roomId = params.get("room");
-if (!roomId) {
-  roomId = Math.random().toString(36).slice(2, 10);
-  history.replaceState(null, "", `/?room=${roomId}`);
-}
 
 function myColor() {
   if (!state) return null;
@@ -83,15 +84,28 @@ function showToast(message) {
   showToast.timer = window.setTimeout(() => toast.classList.add("hidden"), 2600);
 }
 
-async function post(action, payload = {}) {
+async function postToRoom(targetRoomId, action, payload = {}) {
   const response = await fetch("/api/action", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ room: roomId, clientId, action, ...payload })
+    body: JSON.stringify({ room: targetRoomId, clientId, action, ...payload })
   });
   const data = await response.json();
   if (!data.ok) throw new Error(data.error || "操作失败");
   return data.state;
+}
+
+async function post(action, payload = {}) {
+  return postToRoom(roomId, action, payload);
+}
+
+async function fetchChat(target) {
+  const response = await fetch(`/api/chat?target=${encodeURIComponent(target)}&client=${encodeURIComponent(clientId)}`, {
+    cache: "no-store"
+  });
+  const data = await response.json();
+  if (!data.ok) throw new Error(data.error || "无法进入该聊天。");
+  return data.chat;
 }
 
 async function refreshState() {
@@ -108,6 +122,16 @@ async function refreshState() {
       $("#resultModal").classList.add("hidden");
     }
     state = data.state;
+    if (!currentChat || currentChat.roomId === roomId) {
+      currentChat = {
+        roomId,
+        chatId: state.chatId,
+        gameType: state.gameType,
+        messages: state.messages || []
+      };
+    } else {
+      currentChat = await fetchChat(currentChat.roomId);
+    }
     render();
   } catch (error) {
     roomStatus.textContent = "连接中断，正在等待服务恢复...";
@@ -120,6 +144,107 @@ function connect() {
   window.clearInterval(pollTimer);
   refreshState();
   pollTimer = window.setInterval(refreshState, 1200);
+}
+
+function setLobbyTab(tab) {
+  const showPublic = tab === "public";
+  $("#publicRoomsView").classList.toggle("hidden", !showPublic);
+  $("#createJoinView").classList.toggle("hidden", showPublic);
+  $("#publicRoomsTab").setAttribute("aria-selected", String(showPublic));
+  $("#createJoinTab").setAttribute("aria-selected", String(!showPublic));
+}
+
+function gameName(gameType) {
+  return {
+    xiangqi: "象棋",
+    gomoku: "五子棋",
+    chess: "国际象棋",
+    go: "围棋"
+  }[gameType] || "棋类游戏";
+}
+
+function phaseName(phase) {
+  if (phase === "playing") return "对局中";
+  if (phase === "ended") return "已结束";
+  return "等待加入";
+}
+
+function renderPublicRooms(rooms) {
+  const list = $("#publicRoomsList");
+  $("#publicRoomCount").textContent = rooms.length;
+  list.innerHTML = "";
+  if (!rooms.length) {
+    const empty = document.createElement("div");
+    empty.className = "emptyRooms";
+    empty.textContent = "当前没有公开房间，可前往“创建或加入”新建房间。";
+    list.appendChild(empty);
+    return;
+  }
+
+  rooms.forEach((room) => {
+    const card = document.createElement("article");
+    card.className = "roomCard";
+    const info = document.createElement("div");
+    const title = document.createElement("h3");
+    title.textContent = `${gameName(room.gameType)} · ${phaseName(room.phase)}`;
+    const meta = document.createElement("div");
+    meta.className = "roomMeta";
+    const roomCode = document.createElement("code");
+    roomCode.textContent = `房间 ${room.id}`;
+    const viewers = document.createElement("span");
+    viewers.textContent = `${room.viewerCount} 人在线`;
+    meta.append(roomCode, viewers);
+    const seats = document.createElement("div");
+    seats.className = "roomSeats";
+    seats.textContent = `红方${room.redTaken ? "已选" : "空位"} · 黑方${room.blackTaken ? "已选" : "空位"}`;
+    info.append(title, meta, seats);
+    const join = document.createElement("button");
+    join.type = "button";
+    join.dataset.roomId = room.id;
+    join.textContent = "加入";
+    card.append(info, join);
+    list.appendChild(card);
+  });
+}
+
+async function refreshPublicRooms() {
+  try {
+    const response = await fetch("/api/rooms", { cache: "no-store" });
+    const data = await response.json();
+    if (!data.ok) throw new Error(data.error || "读取公开房间失败");
+    renderPublicRooms(data.rooms);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function enterRoom(targetRoomId) {
+  location.href = `/?room=${encodeURIComponent(targetRoomId)}`;
+}
+
+async function verifyAndEnterRoom(target) {
+  const value = String(target || "").trim();
+  if (!value) throw new Error("请输入房间 ID。");
+  const chat = await fetchChat(value);
+  enterRoom(chat.roomId);
+}
+
+function startLobby() {
+  $("#lobbyApp").classList.remove("hidden");
+  $("#gameApp").classList.add("hidden");
+  document.title = "棋局大厅";
+  refreshPublicRooms();
+  window.clearInterval(lobbyPollTimer);
+  lobbyPollTimer = window.setInterval(refreshPublicRooms, 3000);
+}
+
+function startGame() {
+  $("#lobbyApp").classList.add("hidden");
+  $("#gameApp").classList.remove("hidden");
+  document.title = "中国象棋";
+  chatNameInput.value = storedChatName();
+  currentChat = null;
+  connect();
 }
 
 function isLegalTarget(pos) {
@@ -371,8 +496,13 @@ function renderMoves() {
 }
 
 function renderChat() {
-  const messages = state.messages || [];
-  const signature = messages.map((message) => message.id).join(":");
+  const messages = currentChat?.messages || [];
+  const isCurrentRoom = currentChat?.roomId === roomId;
+  $("#chatContextLabel").textContent = isCurrentRoom ? "当前房间聊天" : "正在查看其他房间聊天";
+  $("#chatContextId").textContent = currentChat ? `聊天 ${currentChat.chatId} · 房间 ${currentChat.roomId}` : "";
+  $("#currentChatBtn").disabled = isCurrentRoom;
+  $("#previousChatBtn").disabled = !previousChatRoomId || previousChatRoomId === currentChat?.roomId;
+  const signature = `${currentChat?.roomId || "none"}:${messages.map((message) => message.id).join(":")}`;
   if (signature === lastChatSignature) return;
   const nearBottom = chatList.scrollHeight - chatList.scrollTop - chatList.clientHeight < 48;
   lastChatSignature = signature;
@@ -409,6 +539,14 @@ function renderChat() {
   if (nearBottom || activeSideTab === "chat") chatList.scrollTop = chatList.scrollHeight;
 }
 
+async function openChat(target) {
+  const chat = await fetchChat(target);
+  if (currentChat && currentChat.roomId !== chat.roomId) previousChatRoomId = currentChat.roomId;
+  currentChat = chat;
+  lastChatSignature = null;
+  renderChat();
+}
+
 function setSideTab(tab) {
   activeSideTab = tab;
   const chatActive = tab === "chat";
@@ -422,11 +560,11 @@ function setSideTab(tab) {
 function saveChatName() {
   const name = chatNameInput.value.replace(/\s+/g, " ").trim().slice(0, 16);
   if (!name) {
-    showToast("聊天 ID 不能为空");
+    showToast("人物 ID 不能为空");
     return null;
   }
   chatNameInput.value = name;
-  localStorage.setItem(CHAT_NAME_KEY, name);
+  localStorage.setItem(chatNameKey(), name);
   return name;
 }
 
@@ -493,21 +631,43 @@ async function simpleAction(action, payload) {
   }
 }
 
-$("#newRoomBtn").addEventListener("click", async () => {
-  const response = await fetch("/api/room", { method: "POST" });
-  const data = await response.json();
-  if (!data.ok) {
-    showToast(data.error || "创建失败");
-    return;
+$("#publicRoomsTab").addEventListener("click", () => setLobbyTab("public"));
+$("#createJoinTab").addEventListener("click", () => setLobbyTab("create"));
+$("#publicRoomsList").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-room-id]");
+  if (button) enterRoom(button.dataset.roomId);
+});
+$("#createRoomForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = $("#createRoomBtn");
+  button.disabled = true;
+  try {
+    const gameType = document.querySelector('input[name="gameType"]:checked')?.value || "xiangqi";
+    const response = await fetch("/api/room", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ gameType, isPublic: $("#publicRoomInput").checked })
+    });
+    const data = await response.json();
+    if (!data.ok) throw new Error(data.error || "创建失败");
+    enterRoom(data.state.id);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    button.disabled = false;
   }
-  roomId = data.state.id;
-  history.pushState(null, "", `/?room=${roomId}`);
-  selected = null;
-  legalTargets = [];
-  shownResultKey = null;
-  lastChatSignature = null;
-  $("#resultModal").classList.add("hidden");
-  connect();
+});
+$("#joinRoomForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await verifyAndEnterRoom($("#joinRoomInput").value);
+  } catch (error) {
+    showToast(error.message);
+  }
+});
+
+$("#lobbyBtn").addEventListener("click", () => {
+  location.href = "/";
 });
 
 $("#copyLinkBtn").addEventListener("click", async () => {
@@ -520,8 +680,8 @@ $("#copyLinkBtn").addEventListener("click", async () => {
   }
 });
 
-$("#takeRedBtn").addEventListener("click", () => simpleAction("takeSeat", { color: "red", name: "红方" }));
-$("#takeBlackBtn").addEventListener("click", () => simpleAction("takeSeat", { color: "black", name: "黑方" }));
+$("#takeRedBtn").addEventListener("click", () => simpleAction("takeSeat", { color: "red", name: saveChatName() || "红方" }));
+$("#takeBlackBtn").addEventListener("click", () => simpleAction("takeSeat", { color: "black", name: saveChatName() || "黑方" }));
 $("#lockRedBtn").addEventListener("click", () => simpleAction("lockSeat"));
 $("#lockBlackBtn").addEventListener("click", () => simpleAction("lockSeat"));
 $("#undoBtn").addEventListener("click", () => simpleAction("requestUndo"));
@@ -565,11 +725,40 @@ $("#resultOk").addEventListener("click", () => {
 $("#movesTab").addEventListener("click", () => setSideTab("moves"));
 $("#chatTab").addEventListener("click", () => setSideTab("chat"));
 $("#saveNameBtn").addEventListener("click", () => {
-  if (saveChatName()) showToast("聊天 ID 已保存");
+  if (saveChatName()) showToast("人物 ID 已保存");
 });
 $("#randomNameBtn").addEventListener("click", () => {
   chatNameInput.value = randomChatName();
   saveChatName();
+});
+$("#chatLookupForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = $("#chatLookupInput").value.trim();
+  if (!target) {
+    showToast("请输入聊天 ID 或房间 ID");
+    return;
+  }
+  try {
+    await openChat(target);
+    $("#chatLookupInput").value = "";
+  } catch (error) {
+    showToast(error.message);
+  }
+});
+$("#currentChatBtn").addEventListener("click", async () => {
+  try {
+    await openChat(roomId);
+  } catch (error) {
+    showToast(error.message);
+  }
+});
+$("#previousChatBtn").addEventListener("click", async () => {
+  if (!previousChatRoomId) return;
+  try {
+    await openChat(previousChatRoomId);
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 chatInput.addEventListener("input", () => {
   $("#chatCount").textContent = `${chatInput.value.length} / 200`;
@@ -585,7 +774,13 @@ $("#chatForm").addEventListener("submit", async (event) => {
   const button = $("#sendChatBtn");
   button.disabled = true;
   try {
-    state = await post("sendChat", { name, text });
+    const chatState = await postToRoom(currentChat.roomId, "sendChat", { name, text });
+    currentChat = {
+      roomId: chatState.id,
+      chatId: chatState.chatId,
+      gameType: chatState.gameType,
+      messages: chatState.messages || []
+    };
     chatInput.value = "";
     $("#chatCount").textContent = "0 / 200";
     lastChatSignature = null;
@@ -597,4 +792,5 @@ $("#chatForm").addEventListener("submit", async (event) => {
   }
 });
 
-connect();
+if (roomId) startGame();
+else startLobby();

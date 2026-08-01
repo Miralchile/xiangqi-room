@@ -60,6 +60,257 @@ button:disabled {
   padding: 18px;
 }
 
+.lobbyApp {
+  width: min(1040px, 100%);
+  margin: 0 auto;
+  padding: 28px 18px 48px;
+}
+
+.lobbyHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 8px 0 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.lobbyHeader p {
+  margin: 9px 0 0;
+  color: var(--muted);
+}
+
+.lobbyOnline {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.lobbyOnline span {
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.lobbySurface {
+  padding-top: 22px;
+}
+
+.lobbyTabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 180px));
+  gap: 4px;
+  width: fit-content;
+  margin-bottom: 24px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #eadfce;
+}
+
+.lobbyTabs button {
+  min-width: 160px;
+  border: 0;
+  background: transparent;
+}
+
+.lobbyTabs button[aria-selected="true"] {
+  background: var(--paper);
+  box-shadow: 0 1px 4px rgba(52, 37, 18, 0.14);
+  font-weight: 700;
+}
+
+.publicRoomsList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.roomCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  box-shadow: 0 8px 24px rgba(52, 37, 18, 0.08);
+}
+
+.roomCard h3 {
+  margin: 0 0 7px;
+  font-size: 17px;
+}
+
+.roomMeta,
+.roomSeats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.roomSeats {
+  margin-top: 8px;
+}
+
+.roomCard code,
+.chatContext code {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.roomCard button {
+  min-width: 86px;
+  padding: 8px 12px;
+}
+
+.emptyRooms {
+  padding: 56px 18px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  text-align: center;
+}
+
+.createJoinView {
+  display: grid;
+  gap: 32px;
+}
+
+.lobbySection {
+  padding: 0 0 30px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.sectionHeading h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.sectionHeading span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.gameChoices {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+}
+
+.gameChoices legend {
+  grid-column: 1 / -1;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.gameChoices label {
+  min-width: 0;
+  cursor: pointer;
+}
+
+.gameChoices input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gameChoices label > span {
+  display: grid;
+  align-content: center;
+  min-height: 76px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  font-weight: 700;
+}
+
+.gameChoices input:checked + span {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(183, 125, 40, 0.14);
+}
+
+.gameChoices small,
+.visibilityOption small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.gameChoices .comingSoon {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.visibilityOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.visibilityOption input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--green);
+}
+
+#createRoomBtn {
+  min-width: 160px;
+  padding: 10px 16px;
+}
+
+.joinRoomForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  max-width: 620px;
+}
+
+.joinRoomForm label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.joinRoomForm input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 9px 10px;
+}
+
+.joinRoomForm button {
+  min-width: 110px;
+  padding: 8px 14px;
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -456,6 +707,50 @@ h1 {
   gap: 10px;
 }
 
+.chatContext {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--line);
+}
+
+.chatContext span {
+  font-weight: 700;
+}
+
+.chatLookupForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+}
+
+.chatLookupForm input {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fffdf8;
+  color: var(--ink);
+  padding: 8px 9px;
+}
+
+.chatLookupForm button {
+  min-width: 58px;
+  min-height: 36px;
+}
+
+.chatNavigation {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.chatNavigation button {
+  min-height: 36px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
 .chatIdentity {
   display: grid;
   gap: 5px;
@@ -648,6 +943,41 @@ h1 {
 }
 
 @media (max-width: 620px) {
+  .lobbyApp {
+    padding: 18px 10px 36px;
+  }
+
+  .lobbyHeader,
+  .sectionHeading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .lobbyTabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .lobbyTabs button {
+    min-width: 0;
+  }
+
+  .publicRoomsList {
+    grid-template-columns: 1fr;
+  }
+
+  .roomCard {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .gameChoices {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .joinRoomForm {
+    grid-template-columns: 1fr;
+  }
+
   .app {
     padding: 10px;
   }

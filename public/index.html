@@ -7,14 +7,72 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <main class="app">
+    <main id="lobbyApp" class="lobbyApp">
+      <header class="lobbyHeader">
+        <div>
+          <h1>棋局大厅</h1>
+          <p>加入公开房间，或创建一场新的对局</p>
+        </div>
+        <div class="lobbyOnline"><span id="publicRoomCount">0</span> 个公开房间</div>
+      </header>
+
+      <section class="lobbySurface">
+        <div class="lobbyTabs" role="tablist" aria-label="大厅功能">
+          <button id="publicRoomsTab" type="button" role="tab" aria-selected="true" aria-controls="publicRoomsView">公开房间</button>
+          <button id="createJoinTab" type="button" role="tab" aria-selected="false" aria-controls="createJoinView">创建或加入</button>
+        </div>
+
+        <section id="publicRoomsView" role="tabpanel" aria-labelledby="publicRoomsTab">
+          <div id="publicRoomsList" class="publicRoomsList"></div>
+        </section>
+
+        <section id="createJoinView" class="createJoinView hidden" role="tabpanel" aria-labelledby="createJoinTab">
+          <section class="lobbySection">
+            <div class="sectionHeading">
+              <h2>创建房间</h2>
+              <span>创建后自动进入房间</span>
+            </div>
+            <form id="createRoomForm">
+              <fieldset class="gameChoices">
+                <legend>选择游戏</legend>
+                <label><input type="radio" name="gameType" value="xiangqi" checked /><span>象棋</span></label>
+                <label class="comingSoon"><input type="radio" name="gameType" value="gomoku" disabled /><span>五子棋<small>即将开放</small></span></label>
+                <label class="comingSoon"><input type="radio" name="gameType" value="chess" disabled /><span>国际象棋<small>即将开放</small></span></label>
+                <label class="comingSoon"><input type="radio" name="gameType" value="go" disabled /><span>围棋<small>即将开放</small></span></label>
+              </fieldset>
+              <label class="visibilityOption">
+                <input id="publicRoomInput" type="checkbox" checked />
+                <span><strong>公开房间</strong><small>显示在大厅列表中，任何人都可加入</small></span>
+              </label>
+              <button id="createRoomBtn" type="submit">创建并进入</button>
+            </form>
+          </section>
+
+          <section class="lobbySection joinSection">
+            <div class="sectionHeading">
+              <h2>通过 ID 加入</h2>
+              <span>公开和非公开房间均可使用</span>
+            </div>
+            <form id="joinRoomForm" class="joinRoomForm">
+              <label>
+                <span>房间 ID</span>
+                <input id="joinRoomInput" maxlength="40" autocomplete="off" placeholder="输入房间 ID" />
+              </label>
+              <button type="submit">进入房间</button>
+            </form>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <main id="gameApp" class="app hidden">
       <header class="topbar">
         <div>
           <h1>中国象棋</h1>
           <p id="roomStatus">正在连接棋局...</p>
         </div>
         <div class="topActions">
-          <button id="newRoomBtn" type="button">新开一局</button>
+          <button id="lobbyBtn" type="button">返回大厅</button>
           <button id="copyLinkBtn" type="button">复制邀请链接</button>
         </div>
       </header>
@@ -83,13 +141,25 @@
           </section>
 
           <section id="chatView" class="chatView hidden" role="tabpanel" aria-labelledby="chatTab">
+            <div class="chatContext">
+              <span id="chatContextLabel">当前房间聊天</span>
+              <code id="chatContextId"></code>
+            </div>
+            <form id="chatLookupForm" class="chatLookupForm">
+              <input id="chatLookupInput" maxlength="40" autocomplete="off" placeholder="输入聊天 ID 或房间 ID" aria-label="聊天 ID 或房间 ID" />
+              <button type="submit">进入</button>
+            </form>
+            <div class="chatNavigation">
+              <button id="currentChatBtn" type="button" disabled>当前房间</button>
+              <button id="previousChatBtn" type="button" disabled>上一个聊天</button>
+            </div>
             <label class="chatIdentity">
-              <span>聊天 ID</span>
+              <span>人物 ID</span>
               <input id="chatNameInput" maxlength="16" autocomplete="nickname" />
             </label>
             <div class="chatIdentityActions">
               <button id="randomNameBtn" type="button">换一个</button>
-              <button id="saveNameBtn" type="button">保存 ID</button>
+              <button id="saveNameBtn" type="button">保存人物 ID</button>
             </div>
             <ol id="chatList" class="chatList" aria-live="polite"></ol>
             <form id="chatForm" class="chatForm">

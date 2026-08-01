@@ -35,10 +35,13 @@ function makeId() {
   return crypto.randomBytes(4).toString("hex");
 }
 
-function newRoom(id = makeId()) {
+function newRoom(id = makeId(), options = {}) {
   return {
     id,
     createdAt: Date.now(),
+    gameType: options.gameType || "xiangqi",
+    isPublic: options.isPublic !== false,
+    chatId: makeId(),
     phase: "lobby",
     board: XQ.initialBoard(),
     turn: "red",
@@ -63,6 +66,9 @@ function roomState(room) {
   return {
     id: room.id,
     createdAt: room.createdAt,
+    gameType: room.gameType,
+    isPublic: room.isPublic,
+    chatId: room.chatId,
     phase: room.phase,
     board: room.board,
     turn: room.turn,
@@ -79,6 +85,9 @@ function roomState(room) {
 function hydrateRoom(state) {
   return {
     ...state,
+    gameType: state.gameType || "xiangqi",
+    isPublic: state.isPublic !== false,
+    chatId: state.chatId || makeId(),
     messages: Array.isArray(state.messages) ? state.messages : [],
     clients: new Set(),
     viewers: new Map(),
@@ -89,7 +98,11 @@ function hydrateRoom(state) {
 
 for (const stored of selectAllRooms.all()) {
   const state = JSON.parse(stored.state);
-  rooms.set(state.id, hydrateRoom(state));
+  const room = hydrateRoom(state);
+  rooms.set(state.id, room);
+  if (!state.gameType || !state.chatId || typeof state.isPublic !== "boolean") {
+    upsertRoom.run(room.id, JSON.stringify(roomState(room)), Date.now());
+  }
 }
 
 function saveRoom(room) {
@@ -116,6 +129,9 @@ function publicState(room) {
   return {
     id: room.id,
     createdAt: room.createdAt,
+    gameType: room.gameType,
+    isPublic: room.isPublic,
+    chatId: room.chatId,
     phase: room.phase,
     board: room.board,
     turn: room.turn,
@@ -130,6 +146,42 @@ function publicState(room) {
     check: room.phase === "playing" ? XQ.isInCheck(room.board, room.turn) : false,
     legalMoveCount: room.phase === "playing" ? XQ.allLegalMoves(room.board, room.turn).length : 0
   };
+}
+
+function cleanLookupId(value) {
+  return String(value || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40);
+}
+
+function findRoom(value) {
+  const target = cleanLookupId(value);
+  if (!target) return null;
+  if (rooms.has(target)) return rooms.get(target);
+  for (const room of rooms.values()) {
+    if (room.chatId === target) return room;
+  }
+  return null;
+}
+
+function publicRoomList() {
+  const activeAfter = Date.now() - ROOM_VIEWER_TIMEOUT_MS;
+  return Array.from(rooms.values())
+    .filter((room) => room.isPublic)
+    .map((room) => {
+      for (const [clientId, seenAt] of room.viewers) {
+        if (seenAt < activeAfter) room.viewers.delete(clientId);
+      }
+      return {
+        id: room.id,
+        chatId: room.chatId,
+        gameType: room.gameType,
+        phase: room.phase,
+        viewerCount: room.viewers.size,
+        redTaken: Boolean(room.seats.red),
+        blackTaken: Boolean(room.seats.black),
+        createdAt: room.createdAt
+      };
+    })
+    .sort((a, b) => b.createdAt - a.createdAt);
 }
 
 function touchViewer(room, clientId) {
@@ -465,6 +517,31 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/api/rooms") {
+    json(res, 200, { ok: true, rooms: publicRoomList() });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/chat") {
+    const room = findRoom(url.searchParams.get("target"));
+    if (!room) {
+      json(res, 404, { ok: false, error: "没有找到对应的房间或聊天。" });
+      return;
+    }
+    const clientId = String(url.searchParams.get("client") || "").slice(0, 100);
+    touchViewer(room, clientId);
+    json(res, 200, {
+      ok: true,
+      chat: {
+        roomId: room.id,
+        chatId: room.chatId,
+        gameType: room.gameType,
+        messages: room.messages.slice(-100)
+      }
+    });
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/api/state") {
     const room = getRoom(url.searchParams.get("room"));
     const clientId = String(url.searchParams.get("client") || "").slice(0, 100);
@@ -506,9 +583,17 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === "POST" && url.pathname === "/api/room") {
-    const room = getRoom(makeId());
-    saveRoom(room);
-    json(res, 200, { ok: true, state: publicState(room) });
+    try {
+      const data = await readBody(req);
+      const gameType = String(data.gameType || "xiangqi");
+      if (gameType !== "xiangqi") throw new Error("该游戏暂未开放。");
+      const room = newRoom(makeId(), { gameType, isPublic: data.isPublic !== false });
+      rooms.set(room.id, room);
+      saveRoom(room);
+      json(res, 200, { ok: true, state: publicState(room) });
+    } catch (error) {
+      json(res, 400, { ok: false, error: error.message });
+    }
     return;
   }
 

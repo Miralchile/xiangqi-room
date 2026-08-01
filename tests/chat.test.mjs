@@ -28,11 +28,28 @@ test("players and spectators can use persistent room chat", async () => {
   const base = `http://127.0.0.1:${server.address().port}`;
 
   try {
+    const publicCreated = await fetch(`${base}/api/room`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ gameType: "xiangqi", isPublic: true })
+    }).then((response) => response.json());
+    const privateCreated = await fetch(`${base}/api/room`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ gameType: "xiangqi", isPublic: false })
+    }).then((response) => response.json());
+    const publicRooms = await fetch(`${base}/api/rooms`).then((response) => response.json());
+    assert.ok(publicRooms.rooms.some((room) => room.id === publicCreated.state.id));
+    assert.ok(!publicRooms.rooms.some((room) => room.id === privateCreated.state.id));
+
     const sent = await post(base, "spectator", " 沉着棋友 0088 ", " 大家好 <b>观战</b> ");
     assert.equal(sent.status, 200);
     assert.equal(sent.body.state.messages.length, 1);
     assert.equal(sent.body.state.messages[0].name, "沉着棋友 0088");
     assert.equal(sent.body.state.messages[0].text, "大家好 <b>观战</b>");
+    const chatById = await fetch(`${base}/api/chat?target=${sent.body.state.chatId}&client=visitor`).then((response) => response.json());
+    assert.equal(chatById.chat.roomId, "chat-room");
+    assert.equal(chatById.chat.messages[0].name, "沉着棋友 0088");
 
     const throttled = await post(base, "spectator", "新名字", "第二条");
     assert.equal(throttled.status, 400);

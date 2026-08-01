@@ -31,6 +31,8 @@ let lobbyPollTimer = null;
 let shownRequestKey = null;
 let activeNotificationId = null;
 let lastTurnAnnouncement = null;
+let activeMoveAnimationKey = null;
+let moveAnimationTimer = null;
 const BOARD_PAD = 11;
 const BOARD_X_STEP = (100 - BOARD_PAD * 2) / 8;
 const BOARD_Y_STEP = (100 - BOARD_PAD * 2) / 9;
@@ -165,10 +167,42 @@ function announceTurn(previousState, nextState) {
 
 function applyState(nextState) {
   const previousState = state;
+  const previousMove = previousState?.moves.at(-1);
+  const nextMove = nextState.moves.at(-1);
+  const nextMoveKey = nextMove
+    ? `${nextMove.createdAt}:${nextMove.from.r}:${nextMove.from.c}:${nextMove.to.r}:${nextMove.to.c}`
+    : null;
+  const isNewMove = previousState
+    && nextState.moves.length === previousState.moves.length + 1
+    && nextMove?.createdAt !== previousMove?.createdAt;
+  if (isNewMove) {
+    activeMoveAnimationKey = nextMoveKey;
+    window.clearTimeout(moveAnimationTimer);
+    moveAnimationTimer = window.setTimeout(() => {
+      activeMoveAnimationKey = null;
+      boardEl.querySelectorAll(".pieceMoving").forEach((piece) => piece.classList.remove("pieceMoving"));
+    }, 320);
+  } else if (activeMoveAnimationKey && nextMoveKey !== activeMoveAnimationKey) {
+    window.clearTimeout(moveAnimationTimer);
+    activeMoveAnimationKey = null;
+  }
   if (state?.result && !nextState.result) {
     shownResultKey = null;
     $("#resultModal").classList.add("hidden");
   }
+  const previousViewColor = previousState?.seats.red?.clientId === clientId
+    ? "red"
+    : previousState?.seats.black?.clientId === clientId ? "black" : null;
+  const nextViewColor = nextState.seats.red?.clientId === clientId
+    ? "red"
+    : nextState.seats.black?.clientId === clientId ? "black" : null;
+  const boardUnchanged = previousState
+    && previousViewColor === nextViewColor
+    && previousState.phase === nextState.phase
+    && previousState.turn === nextState.turn
+    && previousState.historyLength === nextState.historyLength
+    && previousState.moves.length === nextState.moves.length
+    && previousMove?.createdAt === nextMove?.createdAt;
   state = nextState;
   if (!currentChat || currentChat.roomId === roomId) {
     currentChat = {
@@ -178,7 +212,7 @@ function applyState(nextState) {
       messages: state.messages || []
     };
   }
-  render();
+  render(boardUnchanged);
   announceTurn(previousState, nextState);
 }
 
@@ -415,9 +449,9 @@ function computeTargets(from) {
 
 async function commitMove(from, to) {
   try {
-    applyState(await post("move", { from, to }));
     selected = null;
     legalTargets = [];
+    applyState(await post("move", { from, to }));
   } catch (error) {
     showToast(error.message);
   }
@@ -450,6 +484,13 @@ function handleCellClick(pos) {
 }
 
 function renderBoard() {
+  const lastMove = state.moves.at(-1) || null;
+  const lastMoveKey = lastMove
+    ? `${lastMove.createdAt}:${lastMove.from.r}:${lastMove.from.c}:${lastMove.to.r}:${lastMove.to.c}`
+    : null;
+  const animateLastMove = lastMoveKey && activeMoveAnimationKey === lastMoveKey;
+  const fromPoint = animateLastMove ? displayPoint(lastMove.from) : null;
+  const toPoint = animateLastMove ? displayPoint(lastMove.to) : null;
   boardEl.innerHTML = "";
   boardEl.appendChild(createBoardLines());
   for (const pos of boardForView()) {
@@ -463,6 +504,14 @@ function renderBoard() {
     cell.style.left = `${point.x}%`;
     cell.style.top = `${point.y}%`;
     cell.setAttribute("aria-label", piece ? `${XQ.colorName(piece.color)}${XQ.pieceLabel(piece)}` : "空位");
+    if (lastMove && pos.r === lastMove.from.r && pos.c === lastMove.from.c) {
+      cell.classList.add("lastMoveFrom");
+      cell.setAttribute("aria-label", `${cell.getAttribute("aria-label")}，上一步起点`);
+    }
+    if (lastMove && pos.r === lastMove.to.r && pos.c === lastMove.to.c) {
+      cell.classList.add("lastMoveTo");
+      cell.setAttribute("aria-label", `${cell.getAttribute("aria-label")}，上一步终点`);
+    }
     if (selected && selected.r === pos.r && selected.c === pos.c) cell.classList.add("selected");
     if (isLegalTarget(pos)) cell.classList.add("target");
     if (piece) cell.classList.add("occupied");
@@ -470,6 +519,11 @@ function renderBoard() {
       const pieceEl = document.createElement("span");
       pieceEl.className = `piece ${piece.color}`;
       pieceEl.textContent = XQ.pieceLabel(piece);
+      if (animateLastMove && pos.r === lastMove.to.r && pos.c === lastMove.to.c) {
+        pieceEl.classList.add("pieceMoving");
+        pieceEl.style.setProperty("--move-x", `${(fromPoint.x - toPoint.x) * boardEl.clientWidth / 100}px`);
+        pieceEl.style.setProperty("--move-y", `${(fromPoint.y - toPoint.y) * boardEl.clientHeight / 100}px`);
+      }
       cell.appendChild(pieceEl);
     }
     cell.addEventListener("click", () => handleCellClick(pos));
@@ -752,7 +806,7 @@ function showResultModal() {
   $("#resultOk").focus();
 }
 
-function render() {
+function render(skipBoard = false) {
   if (!state) return;
   renderStatus();
   renderLobbyControls();
@@ -760,7 +814,7 @@ function render() {
   renderRequestModal();
   renderMoves();
   renderChat();
-  renderBoard();
+  if (!skipBoard) renderBoard();
   showResultModal();
   renderNotificationModal();
 }
@@ -945,7 +999,7 @@ $("#chatForm").addEventListener("submit", async (event) => {
     chatInput.value = "";
     $("#chatCount").textContent = "0 / 200";
     lastChatSignature = null;
-    render();
+    renderChat();
   } catch (error) {
     showToast(error.message);
   } finally {

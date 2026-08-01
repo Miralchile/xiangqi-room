@@ -656,9 +656,54 @@ h1 {
   color: var(--black);
 }
 
+.cell.lastMoveFrom::after,
+.cell.lastMoveTo::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.cell.lastMoveFrom::after {
+  width: 4.2cqw;
+  height: 4.2cqw;
+  border: 0.34cqw dashed rgba(45, 106, 79, 0.82);
+  border-radius: 50%;
+  background: rgba(246, 241, 231, 0.18);
+}
+
+.cell.lastMoveTo::after {
+  width: 9.6cqw;
+  height: 9.6cqw;
+  border: 0.38cqw solid rgba(45, 106, 79, 0.92);
+  border-radius: 50%;
+  box-shadow: 0 0 0 0.32cqw rgba(246, 241, 231, 0.72);
+}
+
+.pieceMoving {
+  z-index: 4;
+  animation: pieceMove 220ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+  will-change: transform;
+}
+
+@keyframes pieceMove {
+  from {
+    transform: translate(var(--move-x), var(--move-y));
+  }
+  to {
+    transform: translate(0, 0);
+  }
+}
+
 .cell.selected {
   background: rgba(45, 106, 79, 0.18);
   box-shadow: 0 0 0 5px rgba(45, 106, 79, 0.32);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pieceMoving {
+    animation: none;
+  }
 }
 
 .cell.target::before {

@@ -55,7 +55,8 @@ function newRoom(id = makeId(), options = {}) {
     pendingDraw: null,
     result: null,
     messages: [],
-    clients: new Set(),
+    notifications: [],
+    clients: new Map(),
     viewers: new Map(),
     chatLastSent: new Map(),
     emptySince: Date.now()
@@ -78,7 +79,8 @@ function roomState(room) {
     pendingUndo: room.pendingUndo,
     pendingDraw: room.pendingDraw,
     result: room.result,
-    messages: room.messages
+    messages: room.messages,
+    notifications: room.notifications
   };
 }
 
@@ -89,7 +91,8 @@ function hydrateRoom(state) {
     isPublic: state.isPublic !== false,
     chatId: state.chatId || makeId(),
     messages: Array.isArray(state.messages) ? state.messages : [],
-    clients: new Set(),
+    notifications: Array.isArray(state.notifications) ? state.notifications : [],
+    clients: new Map(),
     viewers: new Map(),
     chatLastSent: new Map(),
     emptySince: Date.now()
@@ -120,7 +123,21 @@ function getRoom(id) {
   return rooms.get(cleanId);
 }
 
-function publicState(room) {
+function chatRole(room, clientId) {
+  const color = playerColor(room, clientId);
+  if (color === "red") return "红方";
+  if (color === "black") return "黑方";
+  return "观众";
+}
+
+function publicMessages(room) {
+  return room.messages.slice(-100).map((message) => ({
+    ...message,
+    role: chatRole(room, message.clientId)
+  }));
+}
+
+function publicState(room, clientId = "") {
   const activeAfter = Date.now() - ROOM_VIEWER_TIMEOUT_MS;
   for (const [clientId, seenAt] of room.viewers) {
     if (seenAt < activeAfter) room.viewers.delete(clientId);
@@ -141,7 +158,10 @@ function publicState(room) {
     pendingUndo: room.pendingUndo,
     pendingDraw: room.pendingDraw,
     result: room.result,
-    messages: room.messages.slice(-100),
+    messages: publicMessages(room),
+    notifications: clientId
+      ? room.notifications.filter((notification) => notification.clientId === clientId).slice(-10)
+      : [],
     viewerCount: room.viewers.size,
     check: room.phase === "playing" ? XQ.isInCheck(room.board, room.turn) : false,
     legalMoveCount: room.phase === "playing" ? XQ.allLegalMoves(room.board, room.turn).length : 0
@@ -211,15 +231,37 @@ const cleanupTimer = setInterval(cleanupEmptyRooms, ROOM_CLEANUP_INTERVAL_MS);
 cleanupTimer.unref();
 
 function sendEvent(res, payload) {
-  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  if (res.destroyed || res.writableEnded) return false;
+  try {
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function broadcast(room) {
-  const payload = publicState(room);
-  for (const client of Array.from(room.clients)) {
-    sendEvent(client, payload);
+  for (const [client, clientId] of Array.from(room.clients)) {
+    if (!sendEvent(client, publicState(room, clientId))) room.clients.delete(client);
   }
 }
+
+const heartbeatTimer = setInterval(() => {
+  for (const room of rooms.values()) {
+    for (const client of room.clients.keys()) {
+      if (client.destroyed || client.writableEnded) {
+        room.clients.delete(client);
+        continue;
+      }
+      try {
+        client.write(": heartbeat\n\n");
+      } catch {
+        room.clients.delete(client);
+      }
+    }
+  }
+}, 15_000);
+heartbeatTimer.unref();
 
 function json(res, status, data) {
   res.writeHead(status, {
@@ -287,6 +329,9 @@ function resetRoom(room) {
   room.pendingDraw = null;
   room.result = null;
   room.seats = { red: null, black: null };
+  room.messages = [];
+  room.notifications = [];
+  room.chatLastSent.clear();
 }
 
 function cleanChatName(value) {
@@ -305,6 +350,12 @@ function cleanChatText(value) {
     .slice(0, 200);
 }
 
+function addNotification(room, clientId, text) {
+  if (!clientId) return;
+  room.notifications.push({ id: makeId(), clientId, text, createdAt: Date.now() });
+  if (room.notifications.length > 40) room.notifications.splice(0, room.notifications.length - 40);
+}
+
 function handleAction(room, data) {
   const clientId = String(data.clientId || "");
   if (!clientId) throw new Error("缺少 clientId。");
@@ -320,7 +371,7 @@ function handleAction(room, data) {
       }
       room.seats[color] = {
         clientId,
-        name: String(data.name || XQ.colorName(color)).slice(0, 24),
+        name: cleanChatName(data.name) || XQ.colorName(color),
         locked: false
       };
       maybeStart(room);
@@ -349,6 +400,7 @@ function handleAction(room, data) {
       if (room.phase !== "playing") throw new Error("棋局还没有开始。");
       const color = requirePlayer(room, clientId);
       if (room.turn !== color) throw new Error("还没有轮到你走。");
+      if (room.pendingUndo || room.pendingDraw) throw new Error("请先处理当前请求。");
       const move = {
         from: data.from,
         to: data.to
@@ -370,7 +422,7 @@ function handleAction(room, data) {
         from: move.from,
         to: move.to,
         captured: captured ? captured.type : null,
-        notation: XQ.describeMove(piece, move.from, move.to, captured),
+        notation: XQ.describeMove(room.board, piece, move.from, move.to),
         createdAt: Date.now()
       });
       room.pendingUndo = null;
@@ -393,7 +445,7 @@ function handleAction(room, data) {
       if (room.phase !== "playing") throw new Error("当前不能悔棋。");
       const color = requirePlayer(room, clientId);
       if (!room.history.length) throw new Error("还没有可以撤回的走法。");
-      if (room.pendingUndo) throw new Error("已有待处理的悔棋请求。");
+      if (room.pendingUndo || room.pendingDraw) throw new Error("已有待处理的请求。");
       if (color === room.turn || room.moves.at(-1)?.color !== color) {
         throw new Error("只能由刚刚走棋的一方申请悔棋。");
       }
@@ -405,6 +457,7 @@ function handleAction(room, data) {
       const color = requirePlayer(room, clientId);
       if (color === room.pendingUndo.by) throw new Error("需要对方处理悔棋请求。");
       if (color !== room.turn) throw new Error("需要轮到走棋的一方处理悔棋请求。");
+      const requesterClientId = room.seats[room.pendingUndo.by]?.clientId;
       if (data.accept) {
         const previous = room.history.pop();
         room.board = previous.board;
@@ -413,6 +466,7 @@ function handleAction(room, data) {
         room.result = previous.result;
         room.moves.pop();
       }
+      addNotification(room, requesterClientId, data.accept ? "对方已同意你的悔棋请求。" : "对方拒绝了你的悔棋请求。");
       room.pendingUndo = null;
       return;
     }
@@ -432,6 +486,7 @@ function handleAction(room, data) {
     case "requestDraw": {
       if (room.phase !== "playing") throw new Error("当前不能求和。");
       const color = requirePlayer(room, clientId);
+      if (room.pendingUndo || room.pendingDraw) throw new Error("已有待处理的请求。");
       room.pendingDraw = { by: color, createdAt: Date.now() };
       return;
     }
@@ -439,10 +494,12 @@ function handleAction(room, data) {
       if (room.phase !== "playing" || !room.pendingDraw) throw new Error("没有待处理的求和请求。");
       const color = requirePlayer(room, clientId);
       if (color === room.pendingDraw.by) throw new Error("需要对方处理求和请求。");
+      const requesterClientId = room.seats[room.pendingDraw.by]?.clientId;
       if (data.accept) {
         room.phase = "ended";
         room.result = { type: "draw", winner: null, text: "双方同意和棋", createdAt: Date.now() };
       }
+      addNotification(room, requesterClientId, data.accept ? "对方已接受求和。" : "对方拒绝了你的求和请求。");
       room.pendingDraw = null;
       return;
     }
@@ -457,15 +514,34 @@ function handleAction(room, data) {
       resetRoom(room);
       return;
     }
+    case "updateIdentity": {
+      const name = cleanChatName(data.name);
+      if (!name) throw new Error("人物 ID 不能为空。");
+      const color = playerColor(room, clientId);
+      if (color) room.seats[color].name = name;
+      for (const message of room.messages) {
+        if (message.clientId === clientId) message.name = name;
+      }
+      return;
+    }
+    case "dismissNotification": {
+      const notificationId = cleanLookupId(data.notificationId);
+      room.notifications = room.notifications.filter((notification) => (
+        notification.id !== notificationId || notification.clientId !== clientId
+      ));
+      return;
+    }
     case "sendChat": {
       const name = cleanChatName(data.name);
       const text = cleanChatText(data.text);
-      if (!name) throw new Error("聊天 ID 不能为空。");
+      if (!name) throw new Error("人物 ID 不能为空。");
       if (!text) throw new Error("消息不能为空。");
       const now = Date.now();
       const lastSent = room.chatLastSent.get(clientId) || 0;
       if (now - lastSent < CHAT_COOLDOWN_MS) throw new Error("发送太快，请稍后再试。");
       room.chatLastSent.set(clientId, now);
+      const color = playerColor(room, clientId);
+      if (color) room.seats[color].name = name;
       room.messages.push({
         id: makeId(),
         clientId,
@@ -536,7 +612,7 @@ const server = http.createServer(async (req, res) => {
         roomId: room.id,
         chatId: room.chatId,
         gameType: room.gameType,
-        messages: room.messages.slice(-100)
+        messages: publicMessages(room)
       }
     });
     return;
@@ -546,25 +622,28 @@ const server = http.createServer(async (req, res) => {
     const room = getRoom(url.searchParams.get("room"));
     const clientId = String(url.searchParams.get("client") || "").slice(0, 100);
     touchViewer(room, clientId);
-    json(res, 200, { ok: true, state: publicState(room) });
+    json(res, 200, { ok: true, state: publicState(room, clientId) });
     return;
   }
 
   if (req.method === "GET" && url.pathname === "/events") {
     const room = getRoom(url.searchParams.get("room"));
+    const clientId = String(url.searchParams.get("client") || "").slice(0, 100);
     res.writeHead(200, {
       "content-type": "text/event-stream; charset=utf-8",
       "cache-control": "no-store",
       connection: "keep-alive",
       "access-control-allow-origin": "*"
     });
-    room.clients.add(res);
+    touchViewer(room, clientId);
+    room.clients.set(res, clientId);
     room.emptySince = null;
-    sendEvent(res, publicState(room));
-    req.on("close", () => {
-      room.clients.delete(res);
-      broadcast(room);
-    });
+    sendEvent(res, publicState(room, clientId));
+    const removeClient = () => {
+      if (room.clients.delete(res)) broadcast(room);
+    };
+    req.on("close", removeClient);
+    res.on("error", removeClient);
     return;
   }
 
@@ -575,7 +654,7 @@ const server = http.createServer(async (req, res) => {
       handleAction(room, data);
       saveRoom(room);
       broadcast(room);
-      json(res, 200, { ok: true, state: publicState(room) });
+      json(res, 200, { ok: true, state: publicState(room, String(data.clientId || "")) });
     } catch (error) {
       json(res, 400, { ok: false, error: error.message });
     }
@@ -614,6 +693,7 @@ if (require.main === module) {
 
 function closeDatabase() {
   clearInterval(cleanupTimer);
+  clearInterval(heartbeatTimer);
   database.close();
 }
 

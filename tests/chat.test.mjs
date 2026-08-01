@@ -22,6 +22,15 @@ async function post(base, clientId, name, text) {
   return { status: response.status, body: await response.json() };
 }
 
+async function action(base, clientId, actionName, payload = {}) {
+  const response = await fetch(`${base}/api/action`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ room: "chat-room", clientId, action: actionName, ...payload })
+  });
+  return { status: response.status, body: await response.json() };
+}
+
 test("players and spectators can use persistent room chat", async () => {
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -50,6 +59,14 @@ test("players and spectators can use persistent room chat", async () => {
     const chatById = await fetch(`${base}/api/chat?target=${sent.body.state.chatId}&client=visitor`).then((response) => response.json());
     assert.equal(chatById.chat.roomId, "chat-room");
     assert.equal(chatById.chat.messages[0].name, "沉着棋友 0088");
+    assert.equal(chatById.chat.messages[0].role, "观众");
+
+    await action(base, "spectator", "takeSeat", { color: "red", name: "沉着棋友 0088" });
+    const renamed = await action(base, "spectator", "updateIdentity", { name: "专注炮手1024" });
+    assert.equal(renamed.status, 200);
+    assert.equal(renamed.body.state.seats.red.name, "专注炮手1024");
+    assert.equal(renamed.body.state.messages[0].name, "专注炮手1024");
+    assert.equal(renamed.body.state.messages[0].role, "红方");
 
     const throttled = await post(base, "spectator", "新名字", "第二条");
     assert.equal(throttled.status, 400);

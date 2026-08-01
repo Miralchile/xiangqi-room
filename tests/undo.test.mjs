@@ -45,6 +45,11 @@ test("only the player who made the latest move can request undo", async () => {
     assert.equal(lastMoverRed.body.state.pendingUndo.by, "red");
 
     await post(base, "respondUndo", { clientId: "black-client", accept: false });
+    const redFeedback = await fetch(`${base}/api/state?room=undo-rule&client=red-client`).then((response) => response.json());
+    assert.equal(redFeedback.state.notifications.length, 1);
+    assert.match(redFeedback.state.notifications[0].text, /拒绝/);
+    const blackPrivateState = await fetch(`${base}/api/state?room=undo-rule&client=black-client`).then((response) => response.json());
+    assert.equal(blackPrivateState.state.notifications.length, 0);
     await post(base, "move", { clientId: "black-client", from: { r: 3, c: 0 }, to: { r: 4, c: 0 } });
 
     const currentRed = await post(base, "requestUndo", { clientId: "red-client" });
@@ -61,6 +66,7 @@ test("only the player who made the latest move can request undo", async () => {
     assert.equal(storedState.moves.length, 2);
     assert.equal(storedState.pendingUndo.by, "black");
 
+    await post(base, "sendChat", { clientId: "spectator-client", name: "观棋者", text: "下一局见" });
     await post(base, "resign", { clientId: "red-client" });
     const reset = await post(base, "resetAfterResult", { clientId: "spectator-client" });
     assert.equal(reset.status, 200);
@@ -69,6 +75,8 @@ test("only the player who made the latest move can request undo", async () => {
     assert.equal(reset.body.state.historyLength, 0);
     assert.equal(reset.body.state.seats.red, null);
     assert.equal(reset.body.state.seats.black, null);
+    assert.equal(reset.body.state.messages.length, 0);
+    assert.equal(reset.body.state.notifications.length, 0);
     assert.deepEqual(reset.body.state.board, XQ.initialBoard());
   } finally {
     server.close();

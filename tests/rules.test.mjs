@@ -25,6 +25,19 @@ test("a legal move is not blocked because the opponent may mate next", () => {
   assert.equal("allowsImmediateMate" in XQ, false);
 });
 
+test("move notation follows standard Xiangqi files and actions", () => {
+  const board = XQ.initialBoard();
+  assert.equal(XQ.describeMove(board, board[7][1], { r: 7, c: 1 }, { r: 7, c: 4 }), "炮八平五");
+  assert.equal(XQ.describeMove(board, board[0][1], { r: 0, c: 1 }, { r: 2, c: 2 }), "马2进3");
+  assert.equal(XQ.describeMove(board, board[6][0], { r: 6, c: 0 }, { r: 5, c: 0 }), "兵九进一");
+
+  const sameFile = Array.from({ length: 10 }, () => Array(9).fill(null));
+  sameFile[3][4] = { id: "front", color: "red", type: "R" };
+  sameFile[7][4] = { id: "back", color: "red", type: "R" };
+  assert.equal(XQ.describeMove(sameFile, sameFile[3][4], { r: 3, c: 4 }, { r: 3, c: 5 }), "前车平四");
+  assert.equal(XQ.describeMove(sameFile, sameFile[7][4], { r: 7, c: 4 }, { r: 6, c: 4 }), "后车进一");
+});
+
 test("checkmate result messages match winner, loser and spectator roles", () => {
   const result = { type: "checkmate", winner: "red", text: "红方将杀获胜" };
   assert.deepEqual(XQ.resultPresentation(result, "red"), {

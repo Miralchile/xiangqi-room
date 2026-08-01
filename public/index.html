@@ -13,7 +13,13 @@
           <h1>棋局大厅</h1>
           <p>加入公开房间，或创建一场新的对局</p>
         </div>
-        <div class="lobbyOnline"><span id="publicRoomCount">0</span> 个公开房间</div>
+        <div class="lobbyHeaderActions">
+          <div class="lobbyOnline"><span id="publicRoomCount">0</span> 个公开房间</div>
+          <label class="themeToggle">
+            <input class="themeInput" type="checkbox" />
+            <span>夜间模式</span>
+          </label>
+        </div>
       </header>
 
       <section class="lobbySurface">
@@ -72,6 +78,10 @@
           <p id="roomStatus">正在连接棋局...</p>
         </div>
         <div class="topActions">
+          <label class="themeToggle">
+            <input class="themeInput" type="checkbox" />
+            <span>夜间模式</span>
+          </label>
           <button id="lobbyBtn" type="button">返回大厅</button>
           <button id="copyLinkBtn" type="button">复制邀请链接</button>
         </div>
@@ -182,6 +192,27 @@
         <div class="dialogActions">
           <button id="confirmCancel" type="button">取消</button>
           <button id="confirmOk" type="button" class="danger">继续</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="requestModal" class="modal hidden" role="alertdialog" aria-modal="true" aria-labelledby="requestTitle">
+      <div class="dialog requestDialog">
+        <h2 id="requestTitle">对局请求</h2>
+        <p id="requestText"></p>
+        <div class="dialogActions">
+          <button id="requestReject" type="button">拒绝</button>
+          <button id="requestAccept" type="button">接受</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="noticeModal" class="modal hidden" role="alertdialog" aria-modal="true" aria-labelledby="noticeTitle">
+      <div class="dialog noticeDialog">
+        <h2 id="noticeTitle">请求反馈</h2>
+        <p id="noticeText"></p>
+        <div class="dialogActions">
+          <button id="noticeOk" type="button">知道了</button>
         </div>
       </div>
     </div>

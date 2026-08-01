@@ -7,7 +7,7 @@
     red: { K: "帅", A: "仕", E: "相", H: "马", R: "车", C: "炮", S: "兵" },
     black: { K: "将", A: "士", E: "象", H: "马", R: "车", C: "炮", S: "卒" }
   };
-  const PIECE_NAME = { K: "将", A: "士", E: "象", H: "马", R: "车", C: "炮", S: "兵" };
+  const RED_NUMERALS = ["一", "二", "三", "四", "五", "六", "七", "八", "九"];
 
   function colorName(color) {
     return color === "red" ? "红方" : "黑方";
@@ -193,9 +193,47 @@
     return piece ? PIECE_TEXT[piece.color][piece.type] : "";
   }
 
-  function describeMove(piece, from, to, captured) {
-    const cap = captured ? `吃${PIECE_NAME[captured.type]}` : "至";
-    return `${colorName(piece.color)}${PIECE_NAME[piece.type]} ${from.r + 1},${from.c + 1} ${cap} ${to.r + 1},${to.c + 1}`;
+  function moveNumeral(color, value) {
+    return color === "red" ? RED_NUMERALS[value - 1] : String(value);
+  }
+
+  function fileNumeral(color, col) {
+    return moveNumeral(color, color === "red" ? 9 - col : col + 1);
+  }
+
+  function movingPieceName(board, piece, from) {
+    const sameFile = [];
+    for (let r = 0; r < 10; r += 1) {
+      const candidate = board[r][from.c];
+      if (candidate?.color === piece.color && candidate.type === piece.type) sameFile.push(r);
+    }
+    if (sameFile.length < 2) return `${pieceLabel(piece)}${fileNumeral(piece.color, from.c)}`;
+
+    sameFile.sort((a, b) => piece.color === "red" ? a - b : b - a);
+    const index = sameFile.indexOf(from.r);
+    const positions = sameFile.length === 2
+      ? ["前", "后"]
+      : sameFile.length === 3
+        ? ["前", "中", "后"]
+        : sameFile.map((_, itemIndex) => {
+          if (itemIndex === 0) return "前";
+          if (itemIndex === sameFile.length - 1) return "后";
+          return RED_NUMERALS[itemIndex];
+        });
+    return `${positions[index]}${pieceLabel(piece)}`;
+  }
+
+  function describeMove(board, piece, from, to) {
+    const name = movingPieceName(board, piece, from);
+    if (from.r === to.r) return `${name}平${fileNumeral(piece.color, to.c)}`;
+
+    const forward = piece.color === "red" ? to.r < from.r : to.r > from.r;
+    const action = forward ? "进" : "退";
+    const diagonalPiece = piece.type === "H" || piece.type === "E" || piece.type === "A";
+    const destination = diagonalPiece
+      ? fileNumeral(piece.color, to.c)
+      : moveNumeral(piece.color, Math.abs(to.r - from.r));
+    return `${name}${action}${destination}`;
   }
 
   function resultPresentation(result, viewerColor) {

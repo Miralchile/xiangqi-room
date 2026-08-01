@@ -9,8 +9,40 @@
   --black: #171717;
   --gold: #b77d28;
   --green: #2d6a4f;
+  --control: #fff8e8;
+  --input: #fffdf8;
+  --tab-bg: #eadfce;
+  --tab-soft: #f4ead9;
+  --toast-bg: #211b17;
   --shadow: 0 18px 40px rgba(52, 37, 18, 0.14);
   font-family: ui-serif, "Songti SC", "Noto Serif CJK SC", Georgia, serif;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #171614;
+  --ink: #f0e8dc;
+  --muted: #b8ad9f;
+  --line: #554a3d;
+  --paper: #24211d;
+  --red: #ef625b;
+  --black: #171717;
+  --gold: #d5a155;
+  --green: #78b99a;
+  --control: #302b25;
+  --input: #1d1b18;
+  --tab-bg: #302b25;
+  --tab-soft: #302b25;
+  --toast-bg: #f0e8dc;
+  --shadow: 0 18px 40px rgba(0, 0, 0, 0.34);
+}
+
+:root[data-theme="dark"] .blackSeat strong {
+  color: var(--ink);
+}
+
+:root[data-theme="dark"] .danger {
+  color: #ff8a84;
 }
 
 * {
@@ -32,9 +64,9 @@ textarea {
 
 button {
   min-height: 42px;
-  border: 1px solid #c7ad83;
+  border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fff8e8;
+  background: var(--control);
   color: var(--ink);
   cursor: pointer;
 }
@@ -75,6 +107,30 @@ button:disabled {
   border-bottom: 1px solid var(--line);
 }
 
+.lobbyHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.themeToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.themeToggle input {
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
 .lobbyHeader p {
   margin: 9px 0 0;
   color: var(--muted);
@@ -104,7 +160,7 @@ button:disabled {
   padding: 3px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #eadfce;
+  background: var(--tab-bg);
 }
 
 .lobbyTabs button {
@@ -372,7 +428,7 @@ h1 {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 10px;
-  background: #fffdf8;
+  background: var(--input);
   color: var(--ink);
 }
 
@@ -388,7 +444,7 @@ h1 {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
-  background: #fffdf8;
+  background: var(--input);
 }
 
 .redSeat strong {
@@ -636,7 +692,7 @@ h1 {
   padding: 3px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #f4ead9;
+  background: var(--tab-soft);
 }
 
 .sideTabs button {
@@ -677,7 +733,7 @@ h1 {
   min-height: 24px;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #fffdf8;
+  background: var(--input);
   color: var(--muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -729,7 +785,7 @@ h1 {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fffdf8;
+  background: var(--input);
   color: var(--ink);
   padding: 8px 9px;
 }
@@ -763,7 +819,7 @@ h1 {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fffdf8;
+  background: var(--input);
   color: var(--ink);
   padding: 9px 10px;
 }
@@ -861,8 +917,8 @@ h1 {
   max-width: min(92vw, 520px);
   border-radius: 8px;
   padding: 12px 16px;
-  background: #211b17;
-  color: white;
+  background: var(--toast-bg);
+  color: var(--bg);
   box-shadow: var(--shadow);
   z-index: 10;
 }
@@ -911,6 +967,14 @@ h1 {
   border-top: 4px solid var(--gold);
 }
 
+.requestDialog {
+  border-top: 4px solid var(--gold);
+}
+
+.noticeDialog {
+  border-top: 4px solid var(--green);
+}
+
 .resultDialog.isWin {
   border-top-color: var(--green);
 }
@@ -951,6 +1015,11 @@ h1 {
   .sectionHeading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .lobbyHeaderActions {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .lobbyTabs {

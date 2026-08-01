@@ -16,6 +16,8 @@ const toast = $("#toast");
 
 let state = null;
 let pollTimer = null;
+let eventSource = null;
+let chatEventSource = null;
 let pollInFlight = false;
 let selected = null;
 let legalTargets = [];
@@ -26,6 +28,9 @@ let lastChatSignature = null;
 let currentChat = null;
 let previousChatRoomId = null;
 let lobbyPollTimer = null;
+let shownRequestKey = null;
+let activeNotificationId = null;
+let lastTurnAnnouncement = null;
 const BOARD_PAD = 11;
 const BOARD_X_STEP = (100 - BOARD_PAD * 2) / 8;
 const BOARD_Y_STEP = (100 - BOARD_PAD * 2) / 9;
@@ -34,6 +39,18 @@ const BLACK_FILE_LABELS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 const CHAT_NAME_KEY_PREFIX = "board-room-person-id:";
 const CHAT_ADJECTIVES = ["沉着", "敏捷", "从容", "机敏", "果断", "安静", "清醒", "专注"];
 const CHAT_NOUNS = ["棋友", "车手", "炮手", "马客", "观棋者", "过河兵", "守宫人", "对弈者"];
+
+function setTheme(theme) {
+  const dark = theme === "dark";
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  document.querySelectorAll(".themeInput").forEach((input) => {
+    input.checked = dark;
+  });
+  localStorage.setItem("xiangqi-theme", dark ? "dark" : "light");
+}
+
+const storedTheme = localStorage.getItem("xiangqi-theme");
+setTheme(storedTheme || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
 
 const clientId = (() => {
   const key = "xiangqi-client-id";
@@ -117,22 +134,15 @@ async function refreshState() {
     });
     const data = await response.json();
     if (!data.ok) throw new Error(data.error || "连接棋局失败");
-    if (state?.result && !data.state.result) {
-      shownResultKey = null;
-      $("#resultModal").classList.add("hidden");
+    const remoteChat = currentChat && currentChat.roomId !== roomId
+      ? await fetchChat(currentChat.roomId)
+      : null;
+    applyState(data.state);
+    if (remoteChat) {
+      currentChat = remoteChat;
+      lastChatSignature = null;
+      renderChat();
     }
-    state = data.state;
-    if (!currentChat || currentChat.roomId === roomId) {
-      currentChat = {
-        roomId,
-        chatId: state.chatId,
-        gameType: state.gameType,
-        messages: state.messages || []
-      };
-    } else {
-      currentChat = await fetchChat(currentChat.roomId);
-    }
-    render();
   } catch (error) {
     roomStatus.textContent = "连接中断，正在等待服务恢复...";
   } finally {
@@ -140,10 +150,58 @@ async function refreshState() {
   }
 }
 
+function announceTurn(previousState, nextState) {
+  if (nextState.phase !== "playing") {
+    lastTurnAnnouncement = null;
+    return;
+  }
+  const key = `${nextState.turn}:${nextState.moves.length}`;
+  if (key === lastTurnAnnouncement) return;
+  lastTurnAnnouncement = key;
+  if (previousState && previousState.phase === "playing" && previousState.turn === nextState.turn && previousState.moves.length === nextState.moves.length) return;
+  const color = myColor();
+  showToast(color === nextState.turn ? "轮到你走了" : `轮到${XQ.colorName(nextState.turn)}走`);
+}
+
+function applyState(nextState) {
+  const previousState = state;
+  if (state?.result && !nextState.result) {
+    shownResultKey = null;
+    $("#resultModal").classList.add("hidden");
+  }
+  state = nextState;
+  if (!currentChat || currentChat.roomId === roomId) {
+    currentChat = {
+      roomId,
+      chatId: state.chatId,
+      gameType: state.gameType,
+      messages: state.messages || []
+    };
+  }
+  render();
+  announceTurn(previousState, nextState);
+}
+
+function connectGameEvents() {
+  if (eventSource) eventSource.close();
+  eventSource = new EventSource(`/events?room=${encodeURIComponent(roomId)}&client=${encodeURIComponent(clientId)}`);
+  eventSource.onmessage = (event) => {
+    try {
+      applyState(JSON.parse(event.data));
+    } catch {
+      roomStatus.textContent = "实时连接数据异常，正在重试...";
+    }
+  };
+  eventSource.onerror = () => {
+    roomStatus.textContent = "实时连接正在重试，操作仍可继续...";
+  };
+}
+
 function connect() {
   window.clearInterval(pollTimer);
   refreshState();
-  pollTimer = window.setInterval(refreshState, 1200);
+  connectGameEvents();
+  pollTimer = window.setInterval(refreshState, 8000);
 }
 
 function setLobbyTab(tab) {
@@ -357,7 +415,7 @@ function computeTargets(from) {
 
 async function commitMove(from, to) {
   try {
-    await post("move", { from, to });
+    applyState(await post("move", { from, to }));
     selected = null;
     legalTargets = [];
   } catch (error) {
@@ -422,7 +480,7 @@ function renderBoard() {
 function seatText(color) {
   const seat = state.seats[color];
   if (!seat) return "空位";
-  const mine = seat.clientId === clientId ? "你" : seat.name;
+  const mine = seat.clientId === clientId ? `你（${seat.name}）` : seat.name;
   return `${mine}${seat.locked ? "，已锁定" : "，未锁定"}`;
 }
 
@@ -458,7 +516,7 @@ function renderRequests() {
     if (by === color) {
       requestBox.textContent = "已发出悔棋请求，等待对方处理。";
     } else {
-      requestBox.innerHTML = `<strong>${XQ.colorName(by)}申请悔棋</strong><div class="inlineActions"><button data-action="undo-yes">同意</button><button data-action="undo-no">拒绝</button></div>`;
+      requestBox.innerHTML = `<strong>${XQ.colorName(by)}申请悔棋</strong><div class="inlineActions"><button data-action="undo-yes">同意悔棋</button><button data-action="undo-no">拒绝悔棋</button></div>`;
     }
     requestBox.classList.remove("hidden");
   } else if (state.pendingDraw) {
@@ -466,10 +524,58 @@ function renderRequests() {
     if (by === color) {
       requestBox.textContent = "已发出求和请求，等待对方处理。";
     } else {
-      requestBox.innerHTML = `<strong>${XQ.colorName(by)}请求和棋</strong><div class="inlineActions"><button data-action="draw-yes">同意</button><button data-action="draw-no">拒绝</button></div>`;
+      requestBox.innerHTML = `<strong>${XQ.colorName(by)}请求和棋</strong><div class="inlineActions"><button data-action="draw-yes">接受和棋</button><button data-action="draw-no">拒绝和棋</button></div>`;
     }
     requestBox.classList.remove("hidden");
   }
+}
+
+function pendingIncomingRequest() {
+  const color = myColor();
+  if (!color || state.phase !== "playing") return null;
+  if (state.pendingUndo && state.pendingUndo.by !== color) {
+    return { type: "undo", createdAt: state.pendingUndo.createdAt, by: state.pendingUndo.by };
+  }
+  if (state.pendingDraw && state.pendingDraw.by !== color) {
+    return { type: "draw", createdAt: state.pendingDraw.createdAt, by: state.pendingDraw.by };
+  }
+  return null;
+}
+
+function renderRequestModal() {
+  const request = pendingIncomingRequest();
+  if (!request) {
+    shownRequestKey = null;
+    $("#requestModal").classList.add("hidden");
+    return;
+  }
+  const key = `${request.type}:${request.createdAt}`;
+  if (shownRequestKey === key) return;
+  shownRequestKey = key;
+  $("#requestTitle").textContent = request.type === "undo" ? "对方申请悔棋" : "对方请求和棋";
+  $("#requestText").textContent = request.type === "undo"
+    ? `${XQ.colorName(request.by)}希望撤回刚才的一步棋。`
+    : `${XQ.colorName(request.by)}希望本局以和棋结束。`;
+  $("#requestModal").classList.remove("hidden");
+  $("#requestAccept").focus();
+}
+
+function renderNotificationModal() {
+  if (state.result || !$("#requestModal").classList.contains("hidden")) {
+    $("#noticeModal").classList.add("hidden");
+    return;
+  }
+  const notification = state.notifications?.[0];
+  if (!notification) {
+    activeNotificationId = null;
+    $("#noticeModal").classList.add("hidden");
+    return;
+  }
+  if (activeNotificationId === notification.id && !$("#noticeModal").classList.contains("hidden")) return;
+  activeNotificationId = notification.id;
+  $("#noticeText").textContent = notification.text;
+  $("#noticeModal").classList.remove("hidden");
+  $("#noticeOk").focus();
 }
 
 function renderMoves() {
@@ -524,7 +630,7 @@ function renderChat() {
     const meta = document.createElement("div");
     meta.className = "chatMeta";
     const name = document.createElement("strong");
-    name.textContent = message.name;
+    name.textContent = `${message.name}（${message.role || "观众"}）`;
     const time = document.createElement("time");
     time.dateTime = new Date(message.createdAt).toISOString();
     time.textContent = new Date(message.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
@@ -543,8 +649,34 @@ async function openChat(target) {
   const chat = await fetchChat(target);
   if (currentChat && currentChat.roomId !== chat.roomId) previousChatRoomId = currentChat.roomId;
   currentChat = chat;
+  connectChatEvents(chat.roomId);
   lastChatSignature = null;
   renderChat();
+}
+
+function connectChatEvents(targetRoomId) {
+  if (chatEventSource) {
+    chatEventSource.close();
+    chatEventSource = null;
+  }
+  if (!targetRoomId || targetRoomId === roomId) return;
+  chatEventSource = new EventSource(`/events?room=${encodeURIComponent(targetRoomId)}&client=${encodeURIComponent(clientId)}`);
+  chatEventSource.onmessage = (event) => {
+    try {
+      const chatState = JSON.parse(event.data);
+      if (currentChat?.roomId !== chatState.id) return;
+      currentChat = {
+        roomId: chatState.id,
+        chatId: chatState.chatId,
+        gameType: chatState.gameType,
+        messages: chatState.messages || []
+      };
+      lastChatSignature = null;
+      renderChat();
+    } catch {
+      showToast("其他房间聊天连接正在重试");
+    }
+  };
 }
 
 function setSideTab(tab) {
@@ -565,6 +697,14 @@ function saveChatName() {
   }
   chatNameInput.value = name;
   localStorage.setItem(chatNameKey(), name);
+  return name;
+}
+
+async function syncIdentity() {
+  const name = saveChatName();
+  if (!name || !state) return null;
+  const nextState = await simpleAction("updateIdentity", { name });
+  if (nextState) showToast("人物 ID 已同步");
   return name;
 }
 
@@ -589,7 +729,7 @@ function renderStatus() {
   const mine = myColor();
   const role = mine ? `你是${XQ.colorName(mine)}` : "你正在观战";
   roomStatus.textContent = `${role}，当前${XQ.colorName(state.turn)}行棋`;
-  turnText.textContent = `${XQ.colorName(state.turn)}走${check}`;
+  turnText.textContent = `轮到${XQ.colorName(state.turn)}走${check}`;
   turnText.classList.add(state.turn === "red" ? "redTurn" : "blackTurn");
 }
 
@@ -617,17 +757,22 @@ function render() {
   renderStatus();
   renderLobbyControls();
   renderRequests();
+  renderRequestModal();
   renderMoves();
   renderChat();
   renderBoard();
   showResultModal();
+  renderNotificationModal();
 }
 
 async function simpleAction(action, payload) {
   try {
-    await post(action, payload);
+    const nextState = await post(action, payload);
+    applyState(nextState);
+    return nextState;
   } catch (error) {
     showToast(error.message);
+    return null;
   }
 }
 
@@ -703,6 +848,24 @@ requestBox.addEventListener("click", (event) => {
   if (action === "draw-no") simpleAction("respondDraw", { accept: false });
 });
 
+async function respondToPendingRequest(accept) {
+  const request = pendingIncomingRequest();
+  if (!request) return;
+  $("#requestModal").classList.add("hidden");
+  const action = request.type === "undo" ? "respondUndo" : "respondDraw";
+  await simpleAction(action, { accept });
+}
+
+$("#requestAccept").addEventListener("click", () => respondToPendingRequest(true));
+$("#requestReject").addEventListener("click", () => respondToPendingRequest(false));
+
+$("#noticeOk").addEventListener("click", async () => {
+  const notificationId = activeNotificationId;
+  $("#noticeModal").classList.add("hidden");
+  activeNotificationId = null;
+  if (notificationId) await simpleAction("dismissNotification", { notificationId });
+});
+
 $("#confirmCancel").addEventListener("click", () => {
   pendingConfirm = null;
   $("#confirmModal").classList.add("hidden");
@@ -724,12 +887,10 @@ $("#resultOk").addEventListener("click", () => {
 
 $("#movesTab").addEventListener("click", () => setSideTab("moves"));
 $("#chatTab").addEventListener("click", () => setSideTab("chat"));
-$("#saveNameBtn").addEventListener("click", () => {
-  if (saveChatName()) showToast("人物 ID 已保存");
-});
-$("#randomNameBtn").addEventListener("click", () => {
+$("#saveNameBtn").addEventListener("click", syncIdentity);
+$("#randomNameBtn").addEventListener("click", async () => {
   chatNameInput.value = randomChatName();
-  saveChatName();
+  await syncIdentity();
 });
 $("#chatLookupForm").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -790,6 +951,10 @@ $("#chatForm").addEventListener("submit", async (event) => {
   } finally {
     button.disabled = false;
   }
+});
+
+document.querySelectorAll(".themeInput").forEach((input) => {
+  input.addEventListener("change", () => setTheme(input.checked ? "dark" : "light"));
 });
 
 if (roomId) startGame();

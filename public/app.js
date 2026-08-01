@@ -8,6 +8,9 @@ const redSeatText = $("#redSeatText");
 const blackSeatText = $("#blackSeatText");
 const requestBox = $("#requestBox");
 const moveList = $("#moveList");
+const chatList = $("#chatList");
+const chatNameInput = $("#chatNameInput");
+const chatInput = $("#chatInput");
 const lastMoveText = $("#lastMoveText");
 const toast = $("#toast");
 
@@ -18,11 +21,16 @@ let selected = null;
 let legalTargets = [];
 let pendingConfirm = null;
 let shownResultKey = null;
+let activeSideTab = "moves";
+let lastChatSignature = null;
 const BOARD_PAD = 11;
 const BOARD_X_STEP = (100 - BOARD_PAD * 2) / 8;
 const BOARD_Y_STEP = (100 - BOARD_PAD * 2) / 9;
 const RED_FILE_LABELS = ["九", "八", "七", "六", "五", "四", "三", "二", "一"];
 const BLACK_FILE_LABELS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
+const CHAT_NAME_KEY = "xiangqi-chat-name";
+const CHAT_ADJECTIVES = ["沉着", "敏捷", "从容", "机敏", "果断", "安静", "清醒", "专注"];
+const CHAT_NOUNS = ["棋友", "车手", "炮手", "马客", "观棋者", "过河兵", "守宫人", "对弈者"];
 
 const clientId = (() => {
   const key = "xiangqi-client-id";
@@ -32,6 +40,23 @@ const clientId = (() => {
   localStorage.setItem(key, value);
   return value;
 })();
+
+function randomChatName() {
+  const adjective = CHAT_ADJECTIVES[Math.floor(Math.random() * CHAT_ADJECTIVES.length)];
+  const noun = CHAT_NOUNS[Math.floor(Math.random() * CHAT_NOUNS.length)];
+  const number = String(Math.floor(Math.random() * 10_000)).padStart(4, "0");
+  return `${adjective}${noun}${number}`;
+}
+
+function storedChatName() {
+  const stored = localStorage.getItem(CHAT_NAME_KEY)?.trim();
+  if (stored) return stored.slice(0, 16);
+  const generated = randomChatName();
+  localStorage.setItem(CHAT_NAME_KEY, generated);
+  return generated;
+}
+
+chatNameInput.value = storedChatName();
 
 const params = new URLSearchParams(location.search);
 let roomId = params.get("room");
@@ -345,6 +370,66 @@ function renderMoves() {
   });
 }
 
+function renderChat() {
+  const messages = state.messages || [];
+  const signature = messages.map((message) => message.id).join(":");
+  if (signature === lastChatSignature) return;
+  const nearBottom = chatList.scrollHeight - chatList.scrollTop - chatList.clientHeight < 48;
+  lastChatSignature = signature;
+  chatList.innerHTML = "";
+
+  if (!messages.length) {
+    const empty = document.createElement("li");
+    empty.className = "emptyChat";
+    empty.textContent = "还没有消息。";
+    chatList.appendChild(empty);
+    return;
+  }
+
+  messages.forEach((message) => {
+    const item = document.createElement("li");
+    item.className = "chatMessage";
+    if (message.clientId === clientId) item.classList.add("mine");
+
+    const meta = document.createElement("div");
+    meta.className = "chatMeta";
+    const name = document.createElement("strong");
+    name.textContent = message.name;
+    const time = document.createElement("time");
+    time.dateTime = new Date(message.createdAt).toISOString();
+    time.textContent = new Date(message.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+    meta.append(name, time);
+
+    const content = document.createElement("p");
+    content.textContent = message.text;
+    item.append(meta, content);
+    chatList.appendChild(item);
+  });
+
+  if (nearBottom || activeSideTab === "chat") chatList.scrollTop = chatList.scrollHeight;
+}
+
+function setSideTab(tab) {
+  activeSideTab = tab;
+  const chatActive = tab === "chat";
+  $("#movesView").classList.toggle("hidden", chatActive);
+  $("#chatView").classList.toggle("hidden", !chatActive);
+  $("#movesTab").setAttribute("aria-selected", String(!chatActive));
+  $("#chatTab").setAttribute("aria-selected", String(chatActive));
+  if (chatActive) chatList.scrollTop = chatList.scrollHeight;
+}
+
+function saveChatName() {
+  const name = chatNameInput.value.replace(/\s+/g, " ").trim().slice(0, 16);
+  if (!name) {
+    showToast("聊天 ID 不能为空");
+    return null;
+  }
+  chatNameInput.value = name;
+  localStorage.setItem(CHAT_NAME_KEY, name);
+  return name;
+}
+
 function renderStatus() {
   const link = `${location.origin}/?room=${encodeURIComponent(roomId)}`;
   inviteLink.value = link;
@@ -395,6 +480,7 @@ function render() {
   renderLobbyControls();
   renderRequests();
   renderMoves();
+  renderChat();
   renderBoard();
   showResultModal();
 }
@@ -419,6 +505,7 @@ $("#newRoomBtn").addEventListener("click", async () => {
   selected = null;
   legalTargets = [];
   shownResultKey = null;
+  lastChatSignature = null;
   $("#resultModal").classList.add("hidden");
   connect();
 });
@@ -473,6 +560,41 @@ $("#resultOk").addEventListener("click", () => {
   selected = null;
   legalTargets = [];
   simpleAction("resetAfterResult");
+});
+
+$("#movesTab").addEventListener("click", () => setSideTab("moves"));
+$("#chatTab").addEventListener("click", () => setSideTab("chat"));
+$("#saveNameBtn").addEventListener("click", () => {
+  if (saveChatName()) showToast("聊天 ID 已保存");
+});
+$("#randomNameBtn").addEventListener("click", () => {
+  chatNameInput.value = randomChatName();
+  saveChatName();
+});
+chatInput.addEventListener("input", () => {
+  $("#chatCount").textContent = `${chatInput.value.length} / 200`;
+});
+$("#chatForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const name = saveChatName();
+  const text = chatInput.value.trim();
+  if (!name || !text) {
+    if (!text) showToast("消息不能为空");
+    return;
+  }
+  const button = $("#sendChatBtn");
+  button.disabled = true;
+  try {
+    state = await post("sendChat", { name, text });
+    chatInput.value = "";
+    $("#chatCount").textContent = "0 / 200";
+    lastChatSignature = null;
+    render();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    button.disabled = false;
+  }
 });
 
 connect();

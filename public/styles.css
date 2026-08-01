@@ -25,7 +25,8 @@ body {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 
@@ -376,6 +377,29 @@ h1 {
   top: 18px;
 }
 
+.sideTabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f4ead9;
+}
+
+.sideTabs button {
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+}
+
+.sideTabs button[aria-selected="true"] {
+  background: var(--paper);
+  box-shadow: 0 1px 4px rgba(52, 37, 18, 0.14);
+  font-weight: 700;
+}
+
 .moveList {
   list-style: none;
   margin: 0;
@@ -425,6 +449,113 @@ h1 {
   color: var(--muted);
   font-size: 14px;
   line-height: 1.6;
+}
+
+.chatView {
+  display: grid;
+  gap: 10px;
+}
+
+.chatIdentity {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.chatIdentity input,
+.chatForm textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fffdf8;
+  color: var(--ink);
+  padding: 9px 10px;
+}
+
+.chatIdentityActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.chatIdentityActions button {
+  min-height: 36px;
+}
+
+.chatList {
+  list-style: none;
+  min-height: 180px;
+  max-height: 390px;
+  margin: 0;
+  padding: 0 4px 0 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.chatMessage {
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(217, 196, 166, 0.7);
+}
+
+.chatMessage.mine .chatMeta strong {
+  color: var(--green);
+}
+
+.chatMeta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.chatMeta strong {
+  min-width: 0;
+  color: var(--gold);
+  overflow-wrap: anywhere;
+}
+
+.chatMeta time,
+.emptyChat,
+.chatComposeFooter span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.chatMessage p {
+  margin: 5px 0 0;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.emptyChat {
+  padding: 12px 0;
+}
+
+.chatForm {
+  display: grid;
+  gap: 7px;
+}
+
+.chatForm textarea {
+  min-height: 76px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.chatComposeFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chatComposeFooter button {
+  min-width: 78px;
+  min-height: 36px;
+  padding: 6px 14px;
 }
 
 .toast {
@@ -545,5 +676,9 @@ h1 {
 
   .moveList {
     max-height: 260px;
+  }
+
+  .chatList {
+    max-height: 320px;
   }
 }

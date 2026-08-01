@@ -12,6 +12,7 @@ const DATABASE_PATH = path.join(DATA_DIR, "xiangqi.sqlite");
 const ROOM_VIEWER_TIMEOUT_MS = Number(process.env.XIANGQI_ROOM_VIEWER_TIMEOUT_MS || 10_000);
 const ROOM_EMPTY_GRACE_MS = Number(process.env.XIANGQI_ROOM_EMPTY_GRACE_MS || 20_000);
 const ROOM_CLEANUP_INTERVAL_MS = Number(process.env.XIANGQI_ROOM_CLEANUP_INTERVAL_MS || 5_000);
+const CHAT_COOLDOWN_MS = Number(process.env.XIANGQI_CHAT_COOLDOWN_MS || 700);
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const database = new DatabaseSync(DATABASE_PATH);
@@ -50,8 +51,10 @@ function newRoom(id = makeId()) {
     pendingUndo: null,
     pendingDraw: null,
     result: null,
+    messages: [],
     clients: new Set(),
     viewers: new Map(),
+    chatLastSent: new Map(),
     emptySince: Date.now()
   };
 }
@@ -68,15 +71,18 @@ function roomState(room) {
     moves: room.moves,
     pendingUndo: room.pendingUndo,
     pendingDraw: room.pendingDraw,
-    result: room.result
+    result: room.result,
+    messages: room.messages
   };
 }
 
 function hydrateRoom(state) {
   return {
     ...state,
+    messages: Array.isArray(state.messages) ? state.messages : [],
     clients: new Set(),
     viewers: new Map(),
+    chatLastSent: new Map(),
     emptySince: Date.now()
   };
 }
@@ -119,6 +125,7 @@ function publicState(room) {
     pendingUndo: room.pendingUndo,
     pendingDraw: room.pendingDraw,
     result: room.result,
+    messages: room.messages.slice(-100),
     viewerCount: room.viewers.size,
     check: room.phase === "playing" ? XQ.isInCheck(room.board, room.turn) : false,
     legalMoveCount: room.phase === "playing" ? XQ.allLegalMoves(room.board, room.turn).length : 0
@@ -228,6 +235,22 @@ function resetRoom(room) {
   room.pendingDraw = null;
   room.result = null;
   room.seats = { red: null, black: null };
+}
+
+function cleanChatName(value) {
+  return String(value || "")
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 16);
+}
+
+function cleanChatText(value) {
+  return String(value || "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
+    .trim()
+    .slice(0, 200);
 }
 
 function handleAction(room, data) {
@@ -380,6 +403,25 @@ function handleAction(room, data) {
     case "resetAfterResult": {
       if (room.phase !== "ended" || !room.result) throw new Error("当前棋局尚未结束。");
       resetRoom(room);
+      return;
+    }
+    case "sendChat": {
+      const name = cleanChatName(data.name);
+      const text = cleanChatText(data.text);
+      if (!name) throw new Error("聊天 ID 不能为空。");
+      if (!text) throw new Error("消息不能为空。");
+      const now = Date.now();
+      const lastSent = room.chatLastSent.get(clientId) || 0;
+      if (now - lastSent < CHAT_COOLDOWN_MS) throw new Error("发送太快，请稍后再试。");
+      room.chatLastSent.set(clientId, now);
+      room.messages.push({
+        id: makeId(),
+        clientId,
+        name,
+        text,
+        createdAt: now
+      });
+      if (room.messages.length > 100) room.messages.splice(0, room.messages.length - 100);
       return;
     }
     default:

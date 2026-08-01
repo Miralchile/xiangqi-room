@@ -73,8 +73,33 @@
         </section>
 
         <aside class="panel movesPanel">
-          <div class="sectionTitle">棋谱</div>
-          <ol id="moveList" class="moveList" aria-live="polite"></ol>
+          <div class="sideTabs" role="tablist" aria-label="棋局信息">
+            <button id="movesTab" type="button" role="tab" aria-selected="true" aria-controls="movesView">棋谱</button>
+            <button id="chatTab" type="button" role="tab" aria-selected="false" aria-controls="chatView">讨论</button>
+          </div>
+
+          <section id="movesView" role="tabpanel" aria-labelledby="movesTab">
+            <ol id="moveList" class="moveList" aria-live="polite"></ol>
+          </section>
+
+          <section id="chatView" class="chatView hidden" role="tabpanel" aria-labelledby="chatTab">
+            <label class="chatIdentity">
+              <span>聊天 ID</span>
+              <input id="chatNameInput" maxlength="16" autocomplete="nickname" />
+            </label>
+            <div class="chatIdentityActions">
+              <button id="randomNameBtn" type="button">换一个</button>
+              <button id="saveNameBtn" type="button">保存 ID</button>
+            </div>
+            <ol id="chatList" class="chatList" aria-live="polite"></ol>
+            <form id="chatForm" class="chatForm">
+              <textarea id="chatInput" rows="3" maxlength="200" placeholder="输入消息" aria-label="聊天消息"></textarea>
+              <div class="chatComposeFooter">
+                <span id="chatCount">0 / 200</span>
+                <button id="sendChatBtn" type="submit">发送</button>
+              </div>
+            </form>
+          </section>
         </aside>
       </section>
     </main>
